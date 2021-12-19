@@ -1,0 +1,135 @@
+import plotly.graph_objects as go
+import pandas as pd
+import numpy as np
+from xml.dom import minidom
+import itertools
+
+# Create a list which will contain dataframes with each channel data from each file
+dataframes_list = []
+
+# Create a dataframe which will contain statistics output of each channel data from each file (mean, percentiles)
+statistics_table = pd.DataFrame()
+
+for i in range(1, 6, 1):
+    
+    # Read 5 xml-files
+    print('drive/{}.xml'.format(i))
+    xmldoc = minidom.parse('drive/{}.xml'.format(i))
+    
+    
+    for j in range(0, 4, 1):
+        
+        # Read 4 channels' data from each xml-file (X-value and Y-value):
+        # 1 channel — 'S-0-0047.0.0 Position command value'
+        # 2 channel — 'S-0-0051.0.0 Position feedback value'
+        # 3 channel — 'S-0-0040.0.0 Velocity feedback value' 
+        # 4 channel — 'P-0-0440.0.0 Actual output current value (absolute value)'
+        print('{} channel'.format(j+1))
+        itemlist_X = xmldoc.getElementsByTagName('XValue')
+        channel_X = itemlist_X[j].firstChild.wholeText.split('|')
+        channel_X = [float(x) for x in channel_X]
+
+        itemlist_Y = xmldoc.getElementsByTagName('YValue')
+        channel_Y = itemlist_Y[j].firstChild.wholeText.split('|')
+        channel_Y = [float(x) for x in channel_Y]
+
+        # Create a dataframe with x, y values of the channel and add the dataframe to the list of dataframes
+        df = pd.DataFrame(
+            {'X': channel_X,
+             'Y': channel_Y
+            })
+        dataframes_list.append(df.values.tolist())
+        
+        # Output statistics of the created dataframe (for checking)
+        print(df.describe())
+        print()
+        
+        # Add mean value and 25,50,75 percentiles to the previously created statistics dataframe (to fing bad files)
+        statistics_list = [df['Y'].mean(), df['Y'].quantile(0.25), df['Y'].quantile(0.5), df['Y'].quantile(0.75)]
+        statistics_table['{} channel, {}.xml'.format(j+1, i)] = statistics_list
+
+# Sort the statistics dataframe first by channel number then by file number for convenience
+statistics_table.sort_index(axis=1)
+
+# Save the statistics dataframe for a presentation
+statistics_table.sort_index(axis=1).to_excel('statistics.xlsx')
+
+#Checking that every channel from 5 files was read correctly. Length of dataframe_list must be 20: 4 channels in each of 5 files. Length of each dataframe in dataframe_list must be 8192.
+
+print(len(dataframes_list))
+
+for i in dataframes_list:
+    print(len(i))
+
+# Output one of the dataframes to look how it is stored and everything is correct
+df = pd.DataFrame(dataframes_list[0], columns = ['X', 'Y'])
+print(df)
+
+# Create list of 20 colors which will be used for plotting and turn it into cycle
+colors_cycle = itertools.cycle(['#B072CC',
+                                '#960193',
+                                '#E4D917',
+                                '#132F54',
+                                '#67C436',
+                                '#6A339B',
+                                '#BCCCFC',
+                                '#F61E20',
+                                '#2E6F51',
+                                '#005B7D',
+                                '#EF2062',
+                                '#41252A',
+                                '#63E044',
+                                '#B1520E',
+                                '#BAC6E9',
+                                '#00ECC0',
+                                '#D67F8E',
+                                '#E661C0',
+                                '#FFE289',
+                                '#01EBFA'])
+
+# Initialize figure
+fig = go.Figure()
+
+channels_cycle = itertools.cycle(['S-0-0047.0.0 Position command value', 
+                                  'S-0-0051.0.0 Position feedback value', 
+                                  'S-0-0040.0.0 Velocity feedback value', 
+                                  'P-0-0440.0.0 Actual output current value (absolute value)'])
+
+# Add each of 20 dataframes to the graph
+for i in range(0, 20, 1):
+    
+    # Define the file number
+    if i <= 3:
+        file = 1
+    elif i <= 7:
+        file = 2
+    elif i <= 11:
+        file = 3
+    elif i <= 15:
+        file = 4
+    elif i <= 19:
+        file = 5
+        
+    # Define the channel with its full name
+    channel = next(channels_cycle)
+    print(file, ' ', channel)
+
+    df = pd.DataFrame(dataframes_list[i], columns = ['X', 'Y'])
+    
+    fig.add_trace(
+        go.Scatter(x=list(df.X),
+                   y=list(df.Y),
+                   name="{}, {}.xml".format(channel, file),
+                   line=dict(color=next(colors_cycle)))
+        )
+
+# Set title
+fig.update_layout(
+    title_text="Analysis"   #xaxis_domain=[0.05, 1.0]
+)
+
+# Output the graph
+fig.show()
+
+# Save the graph
+fig.write_html("graph.html")
